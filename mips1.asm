@@ -46,39 +46,47 @@
 
 # Macro para cargar una imagen en memoria desde un archivo
 .macro cargar_imagen(%direccion_nombre_archivo, %direccion_carga)
-    # Abrir el archivo
-    li $v0, 13
-    la $a0, %direccion_nombre_archivo
-    li $a1, 0
-    li $a2, 0
-    syscall
-    
-    # Leer contenido del archivo y escribir en memoria
-    move $a0, $v0
-    la $a1, %direccion_carga
-    li $a2, 4
-    leer_bucle:
-        li $v0, 14
-        syscall
-        
-        # Ajustar el orden de bytes (endian)
-        lw $t8, ($a1)
-        andi $t9, $t8, 0x0000FF00
-        andi $t0, $t8, 0x000000FF
-        sll $t0, $t0, 16
-        add $t9, $t9, $t0
-        andi $t0, $t8, 0x00FF0000
-        srl $t0, $t0, 16
-        add $t9, $t9, $t0
-        sw $t9, ($a1)
-        
-        add $a1, $a1, 4
-        bnez $v0, leer_bucle
-    
-    # Cerrar el archivo
-    move $a0, $v0
-    li $v0, 16
-    syscall
+    li $v0, 13                  # Syscall para abrir archivo
+    la $a0, %direccion_nombre_archivo # Dirección del nombre del archivo
+    li $a1, 0                   # Modo de solo lectura
+    li $a2, 0                   # Ignorar permisos
+    syscall                     # Abrir archivo
+    move $t0, $v0               # Guardar el descriptor de archivo
+
+    la $t1, %direccion_carga    # Dirección donde cargar la imagen
+    li $t2, FB_BYTE_LENGTH      # Tamaño máximo a leer
+
+    loop_lectura:
+        li $v0, 14              # Syscall para leer archivo
+        move $a0, $t0           # Descriptor de archivo
+        move $a1, $t1           # Dirección de carga
+        li $a2, 4               # Leer 4 bytes (1 pixel)
+        syscall                 # Leer del archivo
+        beqz $v0, fin_lectura   # Salir si se llega al final del archivo
+
+        # Ajustar el orden de bytes (little endian a RGBA)
+        lw $t3, ($t1)           # Leer el pixel
+        andi $t4, $t3, 0xFF     # Extraer el byte menos significativo (A)
+        sll $t4, $t4, 24        # Moverlo al byte más significativo
+        andi $t5, $t3, 0xFF00   # Extraer el segundo byte (B)
+        sll $t5, $t5, 8         # Moverlo al segundo byte más significativo
+        andi $t6, $t3, 0xFF0000 # Extraer el tercer byte (G)
+        srl $t6, $t6, 8         # Moverlo al segundo byte menos significativo
+        andi $t7, $t3, 0xFF000000 # Extraer el byte más significativo (R)
+        srl $t7, $t7, 24        # Moverlo al byte menos significativo
+        or $t3, $t4, $t5        # Combinar los bytes ajustados
+        or $t3, $t3, $t6
+        or $t3, $t3, $t7
+        sw $t3, ($t1)           # Guardar el pixel ajustado
+
+        addiu $t1, $t1, 4       # Avanzar al siguiente pixel
+        addiu $t2, $t2, -4      # Reducir el tamaño restante
+        bnez $t2, loop_lectura  # Repetir hasta que se lea todo
+
+    fin_lectura:
+        li $v0, 16              # Syscall para cerrar archivo
+        move $a0, $t0           # Descriptor de archivo
+        syscall                 # Cerrar archivo
 .end_macro
 
 # Macro para calcular las coordenadas reales en el framebuffer
@@ -123,29 +131,29 @@
 
 # Macro para dibujar una imagen en el framebuffer
 .macro dibujar_imagen(%datos_img, %ancho_img, %alto_img, %x, %y)
-    la $s5, %datos_img
-    add $s6, $zero, %ancho_img
-    add $t9, $zero, %alto_img
-    add $t0, $zero, %x
-    add $t1, $zero, %y
-    add $t2, $zero, $s6
-    add $t3, $zero, $t0
-    
+    la $s5, %datos_img          # Dirección base de la imagen
+    add $s6, $zero, %ancho_img  # Ancho de la imagen
+    add $t9, $zero, %alto_img   # Alto de la imagen
+    add $t0, $zero, %x          # Coordenada X inicial
+    add $t1, $zero, %y          # Coordenada Y inicial
+    add $t2, $zero, $s6         # Contador de columnas
+    add $t3, $zero, $t0         # Reinicio de X para cada fila
+
     bucle_filas:
         bucle_columnas:
-            lw $t4, ($s5)
+            lw $t4, ($s5)       # Leer el pixel de la imagen
             calcular_posicion_real($t0, $t1)
             obtener_direccion($s2, $s3)
-            sw $t4, ($s4)
-            add $s5, $s5, 4
-            add $t0, $t0, 1
-            add $t2, $t2, -1
+            sw $t4, ($s4)       # Escribir el pixel en el framebuffer
+            addiu $s5, $s5, 4   # Avanzar al siguiente pixel
+            addiu $t0, $t0, 1   # Avanzar a la siguiente columna
+            addiu $t2, $t2, -1  # Reducir el contador de columnas
             bnez $t2, bucle_columnas
-        
-        add $t2, $zero, $s6
-        add $t1, $t1, 1
-        add $t0, $zero, $t3
-        add $t9, $t9, -1
+
+        add $t2, $zero, $s6     # Reiniciar el contador de columnas
+        addiu $t1, $t1, 1       # Avanzar a la siguiente fila
+        add $t0, $zero, $t3     # Reiniciar X
+        addiu $t9, $t9, -1      # Reducir el contador de filas
         bnez $t9, bucle_filas
 .end_macro
 
@@ -171,16 +179,16 @@
 	crab_dollar: .space FISH1_BYTE_LENGTH 
 	lose_screen: .space WL_SCREEN_BYTE_LENGTH
 	win_screen: .space WL_SCREEN_BYTE_LENGTH
-	background_path: .asciiz "background.rgba"
+	fondo_direccion: .asciiz "fondo.rgba"
 	boat_path: .asciiz "boat.rgba"
 	fish1_path: .asciiz "fish1.rgba"
 	fish1_skeleton_path: .asciiz "fish1_skeleton.rgba"
-	fish1_background_path: .asciiz "fish1_background.rgba"
+	fish1_fondo_direccion: .asciiz "fish1_background.rgba"
 	fish2_right_path: .asciiz "fish2_right.rgba"
 	fish2_left_path: .asciiz "fish2_left.rgba"
 	fish2_skeleton_right_path: .asciiz "fish2_skeleton_right.rgba"
 	fish2_skeleton_left_path: .asciiz "fish2_skeleton_left.rgba"
-	fish2_background_path: .asciiz "fish2_background.rgba"
+	fish2_fondo_direccion: .asciiz "fish2_background.rgba"
 	fish3_right_path: .asciiz "fish3_right.rgba"
 	fish3_left_path: .asciiz "fish3_left.rgba"
 	mine1_path: .asciiz "mine1.rgba"
@@ -224,15 +232,15 @@
 .text
 	# load the image's data into memory
 	# load memory
-	cargar_imagen(background_path, background)
+	cargar_imagen(fondo_direccion, background)
 	cargar_imagen(boat_path, boat)
 	cargar_imagen(fish1_path, fish1)
 	cargar_imagen(fish1_skeleton_path, fish1_skeleton)
-	cargar_imagen(fish1_background_path, fish1_background)
+	cargar_imagen(fish1_fondo_direccion, fish1_background)
 	cargar_imagen(fish2_right_path, fish2_right)
 	cargar_imagen(fish2_left_path, fish2_left)
 	cargar_imagen(fish2_skeleton_left_path, fish2_skeleton_left)
-	cargar_imagen(fish2_background_path, fish2_background)
+	cargar_imagen(fish2_fondo_direccion, fish2_background)
 	cargar_imagen(fish3_right_path, fish3_right)
 	cargar_imagen(fish3_left_path, fish3_left)
 	cargar_imagen(mine1_path, mine1)
@@ -469,13 +477,14 @@
 			calcular_posicion_real($t0, $t1)
 			obtener_direccion($s2, $s3)
 			lw $t0, ($s4)
-			beq $t0, 0x00B2BD48, retract_fishing_rod 	# sand
-			beq $t0, 0x00FF6B00, fish1_hit 						# fish 1
-			beq $t0, 0x00C300FF, fish2_hit 						# fish 2
-			beq $t0, 0x0037FF00, fish3_hit 						# fish 3
-			beq $t0, 0x00101010, mine1_hit 					  # mine 1
-			beq $t0, 0x00232323, mine2_hit 					  # mine 2
-			beq $t0, 0x00FF0000, crab_hit 					  # crab
+			# Comparar colores para detectar colisiones
+			beq $t0, 0xFFB2BD48, retract_fishing_rod  # Arena
+			beq $t0, 0xFFFF6B00, fish1_hit           # Pez 1
+			beq $t0, 0xFFC300FF, fish2_hit           # Pez 2
+			beq $t0, 0xFF37FF00, fish3_hit           # Pez 3
+			beq $t0, 0xFF101010, mine1_hit           # Mina 1
+			beq $t0, 0xFF232323, mine2_hit           # Mina 2
+			beq $t0, 0xFFFF0000, crab_hit            # Cangrejo
 						
 			# win/lose screens
 			
