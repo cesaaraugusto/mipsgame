@@ -1,4 +1,4 @@
-# Constants
+
 .eqv WIDTH 2048                # FrameBuffer Width
 .eqv FB_LENGTH 1048576          # FrameBuffer Length
 .eqv SPRITE1A_WIDTH 288        # Sprite Width
