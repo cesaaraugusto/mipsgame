@@ -44,117 +44,135 @@
 .eqv WL_SCREEN_X 28
 .eqv WL_SCREEN_Y 206
 
-# Macro para cargar una imagen en memoria desde un archivo
-.macro cargar_imagen(%direccion_nombre_archivo, %direccion_carga)
-    li $v0, 13                  # Syscall para abrir archivo
-    la $a0, %direccion_nombre_archivo # Dirección del nombre del archivo
-    li $a1, 0                   # Modo de solo lectura
-    li $a2, 0                   # Ignorar permisos
-    syscall                     # Abrir archivo
-    move $t0, $v0               # Guardar el descriptor de archivo
-
-    la $t1, %direccion_carga    # Dirección donde cargar la imagen
-    li $t2, FB_BYTE_LENGTH      # Tamaño máximo a leer
-
-    loop_lectura:
-        li $v0, 14              # Syscall para leer archivo
-        move $a0, $t0           # Descriptor de archivo
-        move $a1, $t1           # Dirección de carga
-        li $a2, 4               # Leer 4 bytes (1 pixel)
-        syscall                 # Leer del archivo
-        beqz $v0, fin_lectura   # Salir si se llega al final del archivo
-
-        # Ajustar el orden de bytes (little endian a RGBA)
-        lw $t3, ($t1)           # Leer el pixel
-        andi $t4, $t3, 0xFF     # Extraer el byte menos significativo (A)
-        sll $t4, $t4, 24        # Moverlo al byte más significativo
-        andi $t5, $t3, 0xFF00   # Extraer el segundo byte (B)
-        sll $t5, $t5, 8         # Moverlo al segundo byte más significativo
-        andi $t6, $t3, 0xFF0000 # Extraer el tercer byte (G)
-        srl $t6, $t6, 8         # Moverlo al segundo byte menos significativo
-        andi $t7, $t3, 0xFF000000 # Extraer el byte más significativo (R)
-        srl $t7, $t7, 24        # Moverlo al byte menos significativo
-        or $t3, $t4, $t5        # Combinar los bytes ajustados
-        or $t3, $t3, $t6
-        or $t3, $t3, $t7
-        sw $t3, ($t1)           # Guardar el pixel ajustado
-
-        addiu $t1, $t1, 4       # Avanzar al siguiente pixel
-        addiu $t2, $t2, -4      # Reducir el tamaño restante
-        bnez $t2, loop_lectura  # Repetir hasta que se lea todo
-
-    fin_lectura:
-        li $v0, 16              # Syscall para cerrar archivo
-        move $a0, $t0           # Descriptor de archivo
-        syscall                 # Cerrar archivo
+# loads file data into memory at a given address
+# endian is considered, uses t0, t1 and t2
+.macro load_image(%file_name_address, %load_address)
+	# open the file
+	li $v0, 13						      # load v0 with integer for syscall
+	la $a0, %file_name_address  # file name address
+	li $a1, 0										# $a1 = flags, 0 is read only
+	li $a2, 0 			 						# $a2 = mode, 0 is ignore
+	syscall 										# Open File, $v0 stores file descriptor (fd)
+	
+	# write byte contents from file to address
+	move $a0, $v0								# move the file descriptor to a0
+	la $a1, %load_address       # load the address to dump data in a1
+	li $a2, 4										# number of characters to read each time
+	# start dumping the bytes
+	loop1:
+		li $v0, 14 								# re-write this register to keep reading from file
+		syscall
+		
+		# treat the endian order bs (images are in BE already)
+		# ok so, if I read 4 bytes they get read as 
+		# little endian so it is flipped (ABGR)
+		# but the format used is not actually RGBA
+		# but rather ARGB for some dumb reason
+		# I will just ignore the A value as it is
+		# irrelevant for the bitmap screen
+		lw $t0, ($a1)
+		andi $t1, $t0, 0x0000FF00
+		andi $t2, $t0, 0x000000FF
+		sll $t2, $t2, 16
+		add $t1, $t1, $t2
+		andi $t2, $t0, 0x00FF0000
+		srl $t2, $t2, 16
+		add $t1, $t1, $t2
+		sw $t1, ($a1)		
+		
+		add $a1, $a1, 4 					# new position to dump the incomming bytes
+		bnez $v0, loop1     			# continue reading until 0 chars read 
+	
+	# close the file
+	move $a0, $v0
+	li $v0, 16
+	syscall
 .end_macro
 
-# Macro para calcular las coordenadas reales en el framebuffer
-.macro calcular_posicion_real(%x, %y)
-    # Procesar coordenada X
-    add $s2, $zero, %x
-    div $t8, $s2, FB_WIDTH
-    mul $t8, $t8, FB_WIDTH
-    ble $s2, FB_WIDTH, x_negativa_o_dentro
-    sub $s2, $s2, $t8
-    b x_final
-    x_negativa_o_dentro:
-    bgez $s2, x_final
-    sub $s2, $s2, $t8
-    beqz $s2, x_final
-    add $s2, $s2, FB_WIDTH
-    x_final:
-    
-    # Procesar coordenada Y
-    add $s3, $zero, %y
-    div $t8, $s3, FB_HEIGHT
-    mul $t8, $t8, FB_HEIGHT
-    ble $s3, FB_HEIGHT, y_negativa_o_dentro
-    sub $s3, $s3, $t8
-    b y_final
-    y_negativa_o_dentro:
-    bgez $s3, y_final
-    sub $s3, $s3, $t8
-    beqz $s3, y_final
-    add $s3, $s3, FB_HEIGHT
-    y_final:
+# gets the real coords of a given (x, y) inside the framebuffer
+# basically it behaves as a screenwrap
+# uses register t0
+# returns the result into s0 (x) and s1 (y) 
+.macro get_coords_real_pos(%x, %y)
+		# place the values in the registers
+		add $s0, $zero, %x
+		add $s1, $zero, %y 
+		
+		# treat x
+		div $t0, $s0, FB_WIDTH # get x's multiplier
+		mul $t0, $t0, FB_WIDTH
+		ble $s0, FB_WIDTH, x_is_neg_or_less_than_fb_width
+		sub $s0, $s0, $t0
+		b x_is_done 		
+		x_is_neg_or_less_than_fb_width:
+		bgez $s0, x_is_done
+	 	sub $s0, $s0, $t0
+	 	beqz $s0, x_is_done 
+		add $s0, $s0, FB_WIDTH
+		x_is_done:
+		
+		# treat y
+		div $t0, $s1, FB_HEIGHT # get y's multiplier
+		mul $t0, $t0, FB_HEIGHT
+		ble $s1, FB_HEIGHT, y_is_neg_or_less_than_fb_height
+		sub $s1, $s1, $t0
+		b y_is_done 		
+		y_is_neg_or_less_than_fb_height:
+		bgez $s1, y_is_done
+		sub $s1, $s1, $t0
+		beqz $s1, y_is_done
+		add $s1, $s1, FB_HEIGHT
+		y_is_done:
+		
+		# results are done
 .end_macro
 
-# Macro para obtener la dirección de memoria de unas coordenadas
-.macro obtener_direccion(%x, %y)
-    add $t8, $zero, %y
-    mul $t8, $t8, FB_WIDTH
-    add $t8, $t8, %x
-    mul $t8, $t8, 4
-    add $s4, $t8, FB_ADDRESS
+# returns the address of the coords in pixels given
+# assumes the coords are inside the framebuffer already (get_coords_real_pos)
+# the address to return is stored in s0
+# uses t0
+.macro get_coords_address(%x, %y)
+	add $t0, $zero, %y
+	mul $t0, $t0, FB_WIDTH
+	add $t0, $t0, %x
+	mul $t0, $t0, 4
+	add $s0, $t0, FB_ADDRESS
 .end_macro
 
-# Macro para dibujar una imagen en el framebuffer
-.macro dibujar_imagen(%datos_img, %ancho_img, %alto_img, %x, %y)
-    la $s5, %datos_img          # Dirección base de la imagen
-    add $s6, $zero, %ancho_img  # Ancho de la imagen
-    add $t9, $zero, %alto_img   # Alto de la imagen
-    add $t0, $zero, %x          # Coordenada X inicial
-    add $t1, $zero, %y          # Coordenada Y inicial
-    add $t2, $zero, $s6         # Contador de columnas
-    add $t3, $zero, $t0         # Reinicio de X para cada fila
-
-    bucle_filas:
-        bucle_columnas:
-            lw $t4, ($s5)       # Leer el pixel de la imagen
-            calcular_posicion_real($t0, $t1)
-            obtener_direccion($s2, $s3)
-            sw $t4, ($s4)       # Escribir el pixel en el framebuffer
-            addiu $s5, $s5, 4   # Avanzar al siguiente pixel
-            addiu $t0, $t0, 1   # Avanzar a la siguiente columna
-            addiu $t2, $t2, -1  # Reducir el contador de columnas
-            bnez $t2, bucle_columnas
-
-        add $t2, $zero, $s6     # Reiniciar el contador de columnas
-        addiu $t1, $t1, 1       # Avanzar a la siguiente fila
-        add $t0, $zero, $t3     # Reiniciar X
-        addiu $t9, $t9, -1      # Reducir el contador de filas
-        bnez $t9, bucle_filas
+# function to draw an image in the framebuffer at the specified position (x, y)
+# uses registers s3, s4, t2, t3, t4, t5, t6 and t7
+.macro draw_image(%img_data, %img_width, %img_height, %x, %y)
+	# fill the registers
+	la $s3, %img_data							# image bytes address
+	add $s4, $zero, %img_width		# image width (pixels)
+	add $t2, $zero, %img_height		# image height (pixels)
+	add $t3, $zero, %x						# image load pos x (pixels)
+	add $t4, $zero, %y						# image load pos y (pixels)
+	add $t6, $zero, $s4 					# counter for row's elements
+	add $t7, $zero, $t3 					# saving x coordinate
+	# loop over rows
+	loop1:
+		
+		# loop over the elements of a row
+		loop2:
+			# get the pixel data
+			lw $t5, ($s3)
+			# get address to write pixel data
+			get_coords_real_pos($t3, $t4)
+			get_coords_address($s0, $s1)
+			# write the pixel data
+			sw $t5, ($s0)
+			# update the variables for the next loop
+			add $s3, $s3, 4			# advance 4 bytes in img data address
+			add $t3, $t3, 1			# advance 1 in x
+			add $t6, $t6, -1  	# one element less in the row
+			bnez $t6, loop2
+		
+		add $t6, $zero, $s4 	# reset counter for row's elements	
+		add $t4, $t4, 1 			# advance one in y
+		add $t3, $zero, $t7		# reset x
+		add $t2, $t2, -1			# next row
+		bnez $t2, loop1
 .end_macro
 
 .data
@@ -179,16 +197,16 @@
 	crab_dollar: .space FISH1_BYTE_LENGTH 
 	lose_screen: .space WL_SCREEN_BYTE_LENGTH
 	win_screen: .space WL_SCREEN_BYTE_LENGTH
-	fondo_direccion: .asciiz "fondo.rgba"
+	background_path: .asciiz "background.rgba"
 	boat_path: .asciiz "boat.rgba"
 	fish1_path: .asciiz "fish1.rgba"
 	fish1_skeleton_path: .asciiz "fish1_skeleton.rgba"
-	fish1_fondo_direccion: .asciiz "fish1_background.rgba"
+	fish1_background_path: .asciiz "fish1_background.rgba"
 	fish2_right_path: .asciiz "fish2_right.rgba"
 	fish2_left_path: .asciiz "fish2_left.rgba"
 	fish2_skeleton_right_path: .asciiz "fish2_skeleton_right.rgba"
 	fish2_skeleton_left_path: .asciiz "fish2_skeleton_left.rgba"
-	fish2_fondo_direccion: .asciiz "fish2_background.rgba"
+	fish2_background_path: .asciiz "fish2_background.rgba"
 	fish3_right_path: .asciiz "fish3_right.rgba"
 	fish3_left_path: .asciiz "fish3_left.rgba"
 	mine1_path: .asciiz "mine1.rgba"
@@ -232,30 +250,30 @@
 .text
 	# load the image's data into memory
 	# load memory
-	cargar_imagen(fondo_direccion, background)
-	cargar_imagen(boat_path, boat)
-	cargar_imagen(fish1_path, fish1)
-	cargar_imagen(fish1_skeleton_path, fish1_skeleton)
-	cargar_imagen(fish1_fondo_direccion, fish1_background)
-	cargar_imagen(fish2_right_path, fish2_right)
-	cargar_imagen(fish2_left_path, fish2_left)
-	cargar_imagen(fish2_skeleton_left_path, fish2_skeleton_left)
-	cargar_imagen(fish2_fondo_direccion, fish2_background)
-	cargar_imagen(fish3_right_path, fish3_right)
-	cargar_imagen(fish3_left_path, fish3_left)
-	cargar_imagen(mine1_path, mine1)
-	cargar_imagen(mine2_path, mine2)
-	cargar_imagen(mine_blow_path, mine_blow)
-	cargar_imagen(lose_screen_path, lose_screen)
-	cargar_imagen(crab_path, crab)
-	cargar_imagen(crab1_path, crab1)
-	cargar_imagen(crab_dollar_path, crab_dollar)
-	cargar_imagen(win_screen_path, win_screen)
+	load_image(background_path, background)
+	load_image(boat_path, boat)
+	load_image(fish1_path, fish1)
+	load_image(fish1_skeleton_path, fish1_skeleton)
+	load_image(fish1_background_path, fish1_background)
+	load_image(fish2_right_path, fish2_right)
+	load_image(fish2_left_path, fish2_left)
+	load_image(fish2_skeleton_left_path, fish2_skeleton_left)
+	load_image(fish2_background_path, fish2_background)
+	load_image(fish3_right_path, fish3_right)
+	load_image(fish3_left_path, fish3_left)
+	load_image(mine1_path, mine1)
+	load_image(mine2_path, mine2)
+	load_image(mine_blow_path, mine_blow)
+	load_image(lose_screen_path, lose_screen)
+	load_image(crab_path, crab)
+	load_image(crab1_path, crab1)
+	load_image(crab_dollar_path, crab_dollar)
+	load_image(win_screen_path, win_screen)
 	# draw in screen
-	dibujar_imagen(background, FB_WIDTH, FB_HEIGHT, 0, 0)
-	dibujar_imagen(boat, BOAT_WIDTH, BOAT_HEIGHT, 0, BOAT_Y)
-	dibujar_imagen(mine1, FISH1_WIDTH, FISH1_HEIGHT, X_MINE1_START, Y_MINE1_START)
-	dibujar_imagen(mine2, FISH1_WIDTH, FISH1_HEIGHT, X_MINE2_END, Y_MINE2_START)
+	draw_image(background, FB_WIDTH, FB_HEIGHT, 0, 0)
+	draw_image(boat, BOAT_WIDTH, BOAT_HEIGHT, 0, BOAT_Y)
+	draw_image(mine1, FISH1_WIDTH, FISH1_HEIGHT, X_MINE1_START, Y_MINE1_START)
+	draw_image(mine2, FISH1_WIDTH, FISH1_HEIGHT, X_MINE2_END, Y_MINE2_START)
 			
 	# infinite loop in which the game develops
 	main_loop:
@@ -305,7 +323,7 @@
 			beqz $t0, fish1_done 
 			lw $t0, x_fish1
 			lw $t1, y_fish1
-			dibujar_imagen(fish1, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+			draw_image(fish1, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 			lw $t0, x_fish1
 			lw $t1, y_fish1
 			add $t0, $t0, FISH1_SPEED
@@ -327,14 +345,14 @@
 			sw $t2, fish2_going_right	
 			add $t0, $t0, FISH2_SPEED
 			sw $t0, x_fish2
-			dibujar_imagen(fish2_right, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+			draw_image(fish2_right, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 			b fish2_done
 			fish2_go_left: # draw the fish going left
 			ble $t0, X_FISH2_START, fish2_go_right
 			sw $zero, fish2_going_right
 			sub $t0, $t0, FISH2_SPEED
 			sw $t0, x_fish2
-			dibujar_imagen(fish2_left, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+			draw_image(fish2_left, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 			fish2_done:
 			
 			# handle fish 3
@@ -351,14 +369,14 @@
 			sw $t2, fish3_going_right	
 			add $t0, $t0, FISH3_SPEED
 			sw $t0, x_fish3
-			dibujar_imagen(fish3_right, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+			draw_image(fish3_right, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 			b fish3_done
 			fish3_go_left: # draw the fish going left
 			ble $t0, X_FISH3_START, fish3_go_right
 			sw $zero, fish3_going_right
 			sub $t0, $t0, FISH3_SPEED
 			sw $t0, x_fish3
-			dibujar_imagen(fish3_left, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+			draw_image(fish3_left, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 			fish3_done:
 		
 			# handle mine 1
@@ -392,7 +410,7 @@
 			draw_mine1:	
 			lw $t0, x_mine1
 			lw $t1, y_mine1
-			dibujar_imagen(mine1, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+			draw_image(mine1, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 			sw $zero, mine1_frame_wait_counter
 			b mine1_done			
 			# update mine counter
@@ -433,7 +451,7 @@
 			draw_mine2:	
 			lw $t0, x_mine2
 			lw $t1, y_mine2
-			dibujar_imagen(mine2, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+			draw_image(mine2, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 			sw $zero, mine2_frame_wait_counter
 			b mine2_done			
 			# update mine1 counter
@@ -448,12 +466,12 @@
 			lw $t1, y_crab
 			lw $t2, crab_alternate
 			beq $t2, 1, draw_crab1 
-			dibujar_imagen(crab, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+			draw_image(crab, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 			add $t2, $zero, 1
 			sw $t2, crab_alternate
 			b crab_alternate_end
 			draw_crab1:
-			dibujar_imagen(crab1, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+			draw_image(crab1, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 			sw $zero, crab_alternate
 			b crab_alternate_end
 			crab_alternate_end:
@@ -474,17 +492,16 @@
 			# check what the fishing rod hits
 			lw $t0, x_start_fishing_rod
 			lw $t1, y_end_fishing_rod
-			calcular_posicion_real($t0, $t1)
-			obtener_direccion($s2, $s3)
-			lw $t0, ($s4)
-			# Comparar colores para detectar colisiones
-			beq $t0, 0xFFB2BD48, retract_fishing_rod  # Arena
-			beq $t0, 0xFFFF6B00, fish1_hit           # Pez 1
-			beq $t0, 0xFFC300FF, fish2_hit           # Pez 2
-			beq $t0, 0xFF37FF00, fish3_hit           # Pez 3
-			beq $t0, 0xFF101010, mine1_hit           # Mina 1
-			beq $t0, 0xFF232323, mine2_hit           # Mina 2
-			beq $t0, 0xFFFF0000, crab_hit            # Cangrejo
+			get_coords_real_pos($t0, $t1)
+			get_coords_address($s0, $s1)
+			lw $t0, ($s0)
+			beq $t0, 0x00B2BD48, retract_fishing_rod 	# sand
+			beq $t0, 0x00FF6B00, fish1_hit 						# fish 1
+			beq $t0, 0x00C300FF, fish2_hit 						# fish 2
+			beq $t0, 0x0037FF00, fish3_hit 						# fish 3
+			beq $t0, 0x00101010, mine1_hit 					  # mine 1
+			beq $t0, 0x00232323, mine2_hit 					  # mine 2
+			beq $t0, 0x00FF0000, crab_hit 					  # crab
 						
 			# win/lose screens
 			
@@ -494,17 +511,17 @@
 				beq $t0, 0x65, retract_fishing_rod
 				lw $t0, x_start_fishing_rod
 				lw $t1, y_end_fishing_rod
-				calcular_posicion_real($t0, $t1)
-				obtener_direccion($s2, $s3)
+				get_coords_real_pos($t0, $t1)
+				get_coords_address($s0, $s1)
 				li $t2, 0xFFFFFFFF
-				sw $t2, ($s4)
+				sw $t2, ($s0)
 				lw $t0, x_start_fishing_rod
 				lw $t1, y_end_fishing_rod
 				add $t0, $t0, 1
-				calcular_posicion_real($t0, $t1)
-				obtener_direccion($s2, $s3)
+				get_coords_real_pos($t0, $t1)
+				get_coords_address($s0, $s1)
 				li $t2, 0xFFFFFFFF
-				sw $t2, ($s4)
+				sw $t2, ($s0)
 				lw $t1, y_end_fishing_rod
 				add $t1, $t1, 1
 				sw $t1, y_end_fishing_rod
@@ -514,11 +531,11 @@
 				# draw skeleton fish
 				lw $t0, x_fish1
 				lw $t1, y_fish1
-				dibujar_imagen(fish1_skeleton, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+				draw_image(fish1_skeleton, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 				# draw background
 				lw $t0, x_fish1
 				lw $t1, y_fish1
-				dibujar_imagen(fish1_background, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+				draw_image(fish1_background, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 				sw $zero, fish1_exists				
 				b retract_fishing_rod
 			
@@ -529,17 +546,17 @@
 				lw $t2, fish2_going_right
 				# draw skeleton right
 				beqz $t2, draw_fish2_skeleton_left
-				dibujar_imagen(fish2_skeleton_right, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+				draw_image(fish2_skeleton_right, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 				b draw_fish2_background
 				# draw skeleton left
 				draw_fish2_skeleton_left:
-				dibujar_imagen(fish2_skeleton_left, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)				
+				draw_image(fish2_skeleton_left, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)				
 				# draw background
 				draw_fish2_background:
 				sw $zero, fish2_exists
 				lw $t0, x_fish2
 				lw $t1, y_fish2
-				dibujar_imagen(fish2_background, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+				draw_image(fish2_background, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 				b retract_fishing_rod
 				
 			fish3_hit:
@@ -549,26 +566,26 @@
 				lw $t2, fish3_going_right
 				# draw skeleton right
 				beqz $t2, draw_fish3_skeleton_left
-				dibujar_imagen(fish2_skeleton_right, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+				draw_image(fish2_skeleton_right, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 				b draw_fish3_background
 				# draw skeleton left
 				draw_fish3_skeleton_left:
-				dibujar_imagen(fish2_skeleton_left, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)				
+				draw_image(fish2_skeleton_left, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)				
 				# draw background
 				draw_fish3_background:
 				sw $zero, fish3_exists
 				lw $t0, x_fish3
 				lw $t1, y_fish3
-				dibujar_imagen(fish2_background, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+				draw_image(fish2_background, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 				b retract_fishing_rod
 			
 			mine1_hit:
 				# draw mine explosion
 				lw $t0, x_mine1
 				lw $t1, y_mine1
-				dibujar_imagen(mine_blow, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+				draw_image(mine_blow, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 				# draw lose screen
-				dibujar_imagen(lose_screen, WL_SCREEN_WIDTH, WL_SCREEN_HEIGHT, WL_SCREEN_X, WL_SCREEN_Y)
+				draw_image(lose_screen, WL_SCREEN_WIDTH, WL_SCREEN_HEIGHT, WL_SCREEN_X, WL_SCREEN_Y)
 				# end program		
 				b exit
 				
@@ -576,9 +593,9 @@
 				# draw mine explosion
 				lw $t0, x_mine2
 				lw $t1, y_mine2
-				dibujar_imagen(mine_blow, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+				draw_image(mine_blow, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 				# draw lose screen
-				dibujar_imagen(lose_screen, WL_SCREEN_WIDTH, WL_SCREEN_HEIGHT, WL_SCREEN_X, WL_SCREEN_Y)
+				draw_image(lose_screen, WL_SCREEN_WIDTH, WL_SCREEN_HEIGHT, WL_SCREEN_X, WL_SCREEN_Y)
 				# end program		
 				b exit
 				
@@ -586,9 +603,9 @@
 				# draw crab dollar (sponge me boy)
 				lw $t0, x_crab
 				lw $t1, y_crab
-				dibujar_imagen(crab_dollar, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
+				draw_image(crab_dollar, FISH1_WIDTH, FISH1_HEIGHT, $t0, $t1)
 				# draw win screen
-				dibujar_imagen(win_screen, WL_SCREEN_WIDTH, WL_SCREEN_HEIGHT, WL_SCREEN_X, WL_SCREEN_Y)
+				draw_image(win_screen, WL_SCREEN_WIDTH, WL_SCREEN_HEIGHT, WL_SCREEN_X, WL_SCREEN_Y)
 				# end program		
 				b exit
 			
@@ -603,13 +620,13 @@
 					lw $t0, x_start_fishing_rod
 					sub $t0, $t0, 1
 					lw $t1, y_end_fishing_rod
-					calcular_posicion_real($t0, $t1)
-					obtener_direccion($s2, $s3)
-					lw $t2, ($s4) # restitute this pixel color
-					add $s4, $s4, 4
-					sw $t2, ($s4)
-					add $s4, $s4, 4
-					sw $t2, ($s4)
+					get_coords_real_pos($t0, $t1)
+					get_coords_address($s0, $s1)
+					lw $t2, ($s0) # restitute this pixel color
+					add $s0, $s0, 4
+					sw $t2, ($s0)
+					add $s0, $s0, 4
+					sw $t2, ($s0)
 					lw $t1, y_end_fishing_rod
 					sub $t1, $t1, 1
 					sw $t1, y_end_fishing_rod						
@@ -620,7 +637,7 @@
 			lw $t0, 0xFFFF0004
 			beqz $t0, boat_end
 			lw $t0, x_boat
-			dibujar_imagen(boat, BOAT_WIDTH, BOAT_HEIGHT, $t0, BOAT_Y)
+			draw_image(boat, BOAT_WIDTH, BOAT_HEIGHT, $t0, BOAT_Y)
 			
 			boat_end:
 			
