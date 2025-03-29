@@ -25,20 +25,44 @@
     li $a2, espacio_fondo_longitud
     syscall
 
+	loop1:
+		li $v0, 14 								# re-write this register to keep reading from file
+		syscall
+		
+		# treat the endian order bs (images are in BE already)
+		# ok so, if I read 4 bytes they get read as 
+		# little endian so it is flipped (ABGR)
+		# but the format used is not actually RGBA
+		# but rather ARGB for some dumb reason
+		# I will just ignore the A value as it is
+		# irrelevant for the bitmap screen
+		lw $t0, ($a1)
+		andi $t1, $t0, 0x0000FF00
+		andi $t2, $t0, 0x000000FF
+		sll $t2, $t2, 16
+		add $t1, $t1, $t2
+		andi $t2, $t0, 0x00FF0000
+		srl $t2, $t2, 16
+		add $t1, $t1, $t2
+		sw $t1, ($a1)		
+		
+		add $a1, $a1, 4 					# new position to dump the incomming bytes
+		bnez $v0, loop1 
+
     # Cerrar archivo
     li $v0, 16
     syscall
 .end_macro
 
 .macro draw_image(%img, %width, %height, %pos_x, %pos_y)
-    la $t0, %img                # Dirección de la imagen
+    la $t0, %img                # Direcciï¿½n de la imagen
     li $t1, 0                   # Contador Y
     li $s0, %width              # Ancho en registro
     li $s1, %height             # Altura en registro
     li $s2, ANCHO_FB            # Constantes en registros
     li $s3, ALTURA_FB
-    li $t7, %pos_x              # Cargar posición X como inmediato
-    li $t8, %pos_y              # Cargar posición Y como inmediato
+    li $t7, %pos_x              # Cargar posiciï¿½n X como inmediato
+    li $t8, %pos_y              # Cargar posiciï¿½n Y como inmediato
 
     loop_y:
         li $t2, 0               # Contador X
@@ -54,22 +78,22 @@
             add $t4, $t7, $t2   # X = pos_x + contador_x
             add $t5, $t8, $t1   # Y = pos_y + contador_y
 
-            # Ajustar coordenadas X (módulo 512)
+            # Ajustar coordenadas X (mï¿½dulo 512)
             div $t4, $s2
             mfhi $t4            # X mod ANCHO_FB
             
-            # Ajustar coordenadas Y (módulo 256)
+            # Ajustar coordenadas Y (mï¿½dulo 256)
             div $t5, $s3
             mfhi $t5            # Y mod ALTURA_FB
 
-            # Calcular dirección en framebuffer
+            # Calcular direcciï¿½n en framebuffer
             mul $t6, $t5, $s2
             add $t6, $t6, $t4
             sll $t6, $t6, 2
             lui $t9, 0x1001
             add $t6, $t6, $t9
 
-            # Escribir píxel
+            # Escribir pï¿½xel
             lw $t9, ($t3)
             sw $t9, ($t6)
 
