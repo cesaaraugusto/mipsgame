@@ -1,17 +1,35 @@
 # Constants
+	#Framebuffer
     .eqv ANCHO_FB 512
     .eqv ALTURA_FB 256
     .eqv DIRECCION_DISPLAY 0x10010000
 
+	#Fondo
     .eqv espacio_fondo_ancho 512
     .eqv espacio_fondo_altura 256
     .eqv espacio_fondo_longitud 524288
 
+	#Sapo
     .eqv espacio_sapo_ancho 72
     .eqv espacio_sapo_altura 54
     .eqv espacio_sapo_longitud 15552
+    
+	#Mosca
+    .eqv espacio_mosca_ancho 32
+    .eqv espacio_mosca_altura 32
+    .eqv espacio_mosca_longitud 4096
 
-.macro load_image(%file_name, %buffer)
+	#Efecto
+    .eqv espacio_efecto_ancho 35
+    .eqv espacio_efecto_altura 35
+    .eqv espacio_efecto_longitud 4900
+
+	#Final
+    .eqv espacio_final_ancho 256
+    .eqv espacio_final_altura 128
+    .eqv espacio_final_longitud 131072
+
+.macro cargar(%file_name, %buffer)
     # Abrir archivo
     li $v0, 13
     la $a0, %file_name
@@ -23,38 +41,14 @@
     li $v0, 14
     la $a1, %buffer
     li $a2, espacio_fondo_longitud
-    syscall
-
-	loop1:
-		li $v0, 14 								# re-write this register to keep reading from file
-		syscall
-		
-		# treat the endian order bs (images are in BE already)
-		# ok so, if I read 4 bytes they get read as 
-		# little endian so it is flipped (ABGR)
-		# but the format used is not actually RGBA
-		# but rather ARGB for some dumb reason
-		# I will just ignore the A value as it is
-		# irrelevant for the bitmap screen
-		lw $t0, ($a1)
-		andi $t1, $t0, 0x0000FF00
-		andi $t2, $t0, 0x000000FF
-		sll $t2, $t2, 16
-		add $t1, $t1, $t2
-		andi $t2, $t0, 0x00FF0000
-		srl $t2, $t2, 16
-		add $t1, $t1, $t2
-		sw $t1, ($a1)		
-		
-		add $a1, $a1, 4 					# new position to dump the incomming bytes
-		bnez $v0, loop1 
+    syscall 
 
     # Cerrar archivo
     li $v0, 16
     syscall
 .end_macro
 
-.macro draw_image(%img, %width, %height, %pos_x, %pos_y)
+.macro pintar(%img, %width, %height, %pos_x, %pos_y)
     la $t0, %img                # Direcci�n de la imagen
     li $t1, 0                   # Contador Y
     li $s0, %width              # Ancho en registro
@@ -111,15 +105,45 @@ espacio_fondo: .space espacio_fondo_longitud
 file_sapo: .asciiz "sapo.rgba"
 .align 2
 espacio_sapo: .space espacio_sapo_longitud
+file_mosca: .asciiz "moscacloseup.rgba"
+.align 2
+espacio_mosca: .space espacio_mosca_longitud
+file_mosca_mala: .asciiz "moscamalaclosedown.rgba"
+.align 2
+espacio_mosca_mala: .space espacio_mosca_longitud
+file_efecto_malo: .asciiz "calabera.rgba"
+.align 2
+espacio_efecto_malo: .space espacio_efecto_longitud
+file_efecto_bueno: .asciiz "brillo.rgba"
+.align 2
+espacio_efecto_bueno: .space espacio_efecto_longitud
+file_final_bueno: .asciiz "win.rgba"
+.align 2
+espacio_final_bueno: .space espacio_final_longitud
+file_final_malo: .asciiz "lose.rgba"
+.align 2
+espacio_final_malo: .space espacio_final_longitud
 
 .text
 main:
-    load_image(file_fondo, espacio_fondo)
-    load_image(file_sapo, espacio_sapo)
+    cargar(file_fondo, espacio_fondo)
+    cargar(file_sapo, espacio_sapo)
+    cargar(file_mosca, espacio_mosca)
+    cargar(file_mosca_mala, espacio_mosca_mala)
+    cargar(file_efecto_malo, espacio_efecto_malo)
+    cargar(file_efecto_bueno, espacio_efecto_bueno)
+    cargar(file_final_malo, espacio_final_malo)
+    cargar(file_final_bueno, espacio_final_bueno)
 
     # Llamar a macros con valores inmediatos
-    draw_image(espacio_fondo, espacio_fondo_ancho, espacio_fondo_altura, 0, 0)
-    draw_image(espacio_sapo, espacio_sapo_ancho, espacio_sapo_altura, 0, 100)
-
+    pintar(espacio_fondo, espacio_fondo_ancho, espacio_fondo_altura, 0, 0)
+    pintar(espacio_sapo, espacio_sapo_ancho, espacio_sapo_altura, 0, 101)
+    pintar(espacio_mosca, espacio_mosca_ancho, espacio_mosca_altura, 200, 200)
+    pintar(espacio_mosca_mala, espacio_mosca_ancho, espacio_mosca_altura, 263, 56)
+    pintar(espacio_mosca, espacio_mosca_ancho, espacio_mosca_altura, 325, 200)
+    pintar(espacio_mosca_mala, espacio_mosca_ancho, espacio_mosca_altura, 388, 56)
+    pintar(espacio_mosca, espacio_mosca_ancho, espacio_mosca_altura, 450, 200)
+    mover_objeto(200, 200, 200, 56, 4, espacio_mosca, espacio_mosca_mala, espacio_mosca_ancho, espacio_mosca_altura)
+    
     li $v0, 10
     syscall
