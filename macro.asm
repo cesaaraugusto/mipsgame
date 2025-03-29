@@ -144,13 +144,16 @@ espacio_final_bueno: .space espacio_final_longitud
 file_final_malo: .asciiz "lose.rgba"
 .align 2
 espacio_final_malo: .space espacio_final_longitud
+file_fondo_objeto: .asciiz "fondoobjeto.rgba"
+.align 2
+espacio_fondo_objeto: .space espacio_efecto_longitud
 
 .text
 main:
     # Carga imagenes
     cargar(file_fondo, espacio_fondo)
     cargar(file_sapo, espacio_sapo)
-    cargar(file_sapo_lengua, espacio_sapo_lengua)
+    cargar(file_sapo, espacio_sapo_lengua)
     cargar(file_mosca_arriba, espacio_mosca_arriba)
     cargar(file_mosca_arriba_vuela, espacio_mosca_arriba_vuela)
     cargar(file_mosca_abajo, espacio_mosca_abajo)
