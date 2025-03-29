@@ -105,12 +105,33 @@ espacio_fondo: .space espacio_fondo_longitud
 file_sapo: .asciiz "sapo.rgba"
 .align 2
 espacio_sapo: .space espacio_sapo_longitud
-file_mosca: .asciiz "moscacloseup.rgba"
+file_sapo_lengua: .asciiz "sapolengua.rgba"
 .align 2
-espacio_mosca: .space espacio_mosca_longitud
-file_mosca_mala: .asciiz "moscamalaclosedown.rgba"
+espacio_sapo_lengua: .space espacio_sapo_longitud
+file_mosca_arriba: .asciiz "moscacloseup.rgba"
 .align 2
-espacio_mosca_mala: .space espacio_mosca_longitud
+espacio_mosca_arriba: .space espacio_mosca_longitud
+file_mosca_arriba_vuela: .asciiz "moscaopenup.rgba"
+.align 2
+espacio_mosca_arriba_vuela: .space espacio_mosca_longitud
+file_mosca_abajo: .asciiz "moscaclosedown.rgba"
+.align 2
+espacio_mosca_abajo: .space espacio_mosca_longitud
+file_mosca_abajo_vuela: .asciiz "moscaopendown.rgba"
+.align 2
+espacio_mosca_abajo_vuela: .space espacio_mosca_longitud
+file_mosca_mala_arriba: .asciiz "moscamalacloseup.rgba"
+.align 2
+espacio_mosca_mala_arriba: .space espacio_mosca_longitud
+file_mosca_mala_arriba_vuela: .asciiz "moscamalaopenup.rgba"
+.align 2
+espacio_mosca_mala_arriba_vuela: .space espacio_mosca_longitud
+file_mosca_mala_abajo: .asciiz "moscamalaclosedown.rgba"
+.align 2
+espacio_mosca_mala_abajo: .space espacio_mosca_longitud
+file_mosca_mala_abajo_vuela: .asciiz "moscamalaopendown.rgba"
+.align 2
+espacio_mosca_mala_abajo_vuela: .space espacio_mosca_longitud
 file_efecto_malo: .asciiz "calabera.rgba"
 .align 2
 espacio_efecto_malo: .space espacio_efecto_longitud
@@ -126,10 +147,18 @@ espacio_final_malo: .space espacio_final_longitud
 
 .text
 main:
+    # Carga imagenes
     cargar(file_fondo, espacio_fondo)
     cargar(file_sapo, espacio_sapo)
-    cargar(file_mosca, espacio_mosca)
-    cargar(file_mosca_mala, espacio_mosca_mala)
+    cargar(file_sapo_lengua, espacio_sapo_lengua)
+    cargar(file_mosca_arriba, espacio_mosca_arriba)
+    cargar(file_mosca_arriba_vuela, espacio_mosca_arriba_vuela)
+    cargar(file_mosca_abajo, espacio_mosca_abajo)
+    cargar(file_mosca_abajo_vuela, espacio_mosca_abajo_vuela)
+    cargar(file_mosca_mala_arriba, espacio_mosca_mala_arriba)
+    cargar(file_mosca_mala_arriba_vuela, espacio_mosca_mala_arriba_vuela)
+    cargar(file_mosca_mala_abajo, espacio_mosca_mala_abajo)
+    cargar(file_mosca_mala_abajo_vuela, espacio_mosca_mala_abajo_vuela)
     cargar(file_efecto_malo, espacio_efecto_malo)
     cargar(file_efecto_bueno, espacio_efecto_bueno)
     cargar(file_final_malo, espacio_final_malo)
@@ -137,13 +166,12 @@ main:
 
     # Llamar a macros con valores inmediatos
     pintar(espacio_fondo, espacio_fondo_ancho, espacio_fondo_altura, 0, 0)
-    pintar(espacio_sapo, espacio_sapo_ancho, espacio_sapo_altura, 0, 101)
-    pintar(espacio_mosca, espacio_mosca_ancho, espacio_mosca_altura, 200, 200)
-    pintar(espacio_mosca_mala, espacio_mosca_ancho, espacio_mosca_altura, 263, 56)
-    pintar(espacio_mosca, espacio_mosca_ancho, espacio_mosca_altura, 325, 200)
-    pintar(espacio_mosca_mala, espacio_mosca_ancho, espacio_mosca_altura, 388, 56)
-    pintar(espacio_mosca, espacio_mosca_ancho, espacio_mosca_altura, 450, 200)
-    mover_objeto(200, 200, 200, 56, 4, espacio_mosca, espacio_mosca_mala, espacio_mosca_ancho, espacio_mosca_altura)
+    pintar(espacio_sapo_lengua, espacio_sapo_ancho, espacio_sapo_altura, 0, 101)
+    pintar(espacio_mosca_arriba, espacio_mosca_ancho, espacio_mosca_altura, 200, 112)
+    pintar(espacio_mosca_mala_abajo, espacio_mosca_ancho, espacio_mosca_altura, 263, 0)
+    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, 325, 112)
+    pintar(espacio_mosca_mala_arriba, espacio_mosca_ancho, espacio_mosca_altura, 388, 224)
+    pintar(espacio_mosca_arriba, espacio_mosca_ancho, espacio_mosca_altura, 450, 112)
     
     li $v0, 10
     syscall
