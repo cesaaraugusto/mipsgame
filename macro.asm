@@ -210,10 +210,10 @@ mine1_going_right: .word 1
 mine2_going_right: .word 1
 mine1_frame_wait_counter: .word 0
 mine2_frame_wait_counter: .word 0
-fish1_exists: .word 1
-fish2_exists: .word 1
-fish3_exists: .word 1
-crab_alternate: .word 1
+mosca1_exists: .word 1
+mosca3_exists: .word 1
+mosca4_exists: .word 1
+mosca_alternate: .word 1
 tecla_lengua: .word 0
 score: .word 0
 j_lengua: .word 0
