@@ -11,8 +11,8 @@
 
 	#Sapo
     .eqv espacio_sapo_ancho 72
-    .eqv espacio_sapo_altura 54
-    .eqv espacio_sapo_longitud 15552
+    .eqv espacio_sapo_altura 62
+    .eqv espacio_sapo_longitud 17856
     
 	#Mosca
     .eqv espacio_mosca_ancho 32
@@ -35,12 +35,8 @@
     .eqv i_sapo_posicion 0
     .eqv j_sapo_posicion_inicial 101 
     .eqv sapo_velocidad 4 
-    .eqv j_mosca1_minimo 150
-    .eqv j_mosca1_maximo 0
     .eqv j_mosca2_minimo 0
     .eqv j_mosca2_maximo 256
-    .eqv j_mosca3_minimo 256
-    .eqv j_mosca3_maximo 50
     .eqv j_mosca4_minimo 256
     .eqv j_mosca4_maximo 0
     .eqv j_mosca5_minimo 150
@@ -83,53 +79,41 @@
 .end_macro
 
 .macro pintar(%img, %width, %height, %pos_x, %pos_y)
-    la $t0, %img                # Direcci�n de la imagen
-    li $t1, 0                   # Contador Y
-    li $s0, %width              # Ancho en registro
-    li $s1, %height             # Altura en registro
-    li $s2, ANCHO_FB            # Constantes en registros
-    li $s3, ALTURA_FB
-    li $t7, %pos_x              # Cargar posici�n X como inmediato
-    li $t8, %pos_y              # Cargar posici�n Y como inmediato
-
-    loop_y:
-        li $t2, 0               # Contador X
-        
-        loop_x:
-            # Calcular offset de la imagen
-            mul $t3, $t1, $s0
-            add $t3, $t3, $t2
-            sll $t3, $t3, 2
-            add $t3, $t0, $t3
-
-            # Calcular coordenadas finales
-            add $t4, $t7, $t2   # X = pos_x + contador_x
-            add $t5, $t8, $t1   # Y = pos_y + contador_y
-
-            # Ajustar coordenadas X (m�dulo 512)
-            div $t4, $s2
-            mfhi $t4            # X mod ANCHO_FB
-            
-            # Ajustar coordenadas Y (m�dulo 256)
-            div $t5, $s3
-            mfhi $t5            # Y mod ALTURA_FB
-
-            # Calcular direcci�n en framebuffer
-            mul $t6, $t5, $s2
-            add $t6, $t6, $t4
-            sll $t6, $t6, 2
-            lui $t9, 0x1001
-            add $t6, $t6, $t9
-
-            # Escribir p�xel
-            lw $t9, ($t3)
-            sw $t9, ($t6)
-
-            addi $t2, $t2, 1
-            blt $t2, $s0, loop_x
-
-        addi $t1, $t1, 1
-        blt $t1, $s1, loop_y
+    # fill the registers
+	la $s3, %img							# image bytes address
+	add $s4, $zero, %width		# image width (pixels)
+	add $t2, $zero, %height		# image height (pixels)
+	add $t3, $zero, %pos_x						# image load pos x (pixels)
+	add $t4, $zero, %pos_y						# image load pos y (pixels)
+	add $t6, $zero, $s4 					# counter for row's elements
+	add $t7, $zero, $t3 					# saving x coordinate
+	# loop over rows
+	loop1:
+		
+		# loop over the elements of a row
+		loop2:
+			# get the pixel data
+			lw $t5, ($s3)
+			# get address to write pixel data
+			ubicar($t3, $t4)
+			add $t0, $zero, $s1
+			mul $t0, $t0, ANCHO_FB
+			add $t0, $t0, $s0
+			mul $t0, $t0, 4
+			add $s0, $t0, DIRECCION_DISPLAY
+			# write the pixel data
+			sw $t5, ($s0)
+			# update the variables for the next loop
+			add $s3, $s3, 4			# advance 4 bytes in img data address
+			add $t3, $t3, 1			# advance 1 in x
+			add $t6, $t6, -1  	# one element less in the row
+			bnez $t6, loop2
+		
+		add $t6, $zero, $s4 	# reset counter for row's elements	
+		add $t4, $t4, 1 			# advance one in y
+		add $t3, $zero, $t7		# reset x
+		add $t2, $t2, -1			# next row
+		bnez $t2, loop1
 .end_macro
 
 .macro ubicar(%x, %y)
@@ -230,17 +214,17 @@ fish1_exists: .word 1
 fish2_exists: .word 1
 fish3_exists: .word 1
 crab_alternate: .word 1
-space_key: .word 0
+tecla_lengua: .word 0
 score: .word 0
-x_start_fishing_rod: .word 0
-y_start_fishing_rod: .word 0
-y_end_fishing_rod: .word 0
+j_lengua: .word 0
+i_lengua_inicial: .word 0
+i_lengua_final: .word 0
+
 .text
-main:
     # Carga imagenes
     cargar(file_fondo, espacio_fondo)
     cargar(file_sapo, espacio_sapo)
-    cargar(file_sapo, espacio_sapo_lengua)
+    cargar(file_sapo_lengua, espacio_sapo_lengua)
     cargar(file_mosca_arriba, espacio_mosca_arriba)
     cargar(file_mosca_arriba_vuela, espacio_mosca_arriba_vuela)
     cargar(file_mosca_abajo, espacio_mosca_abajo)
@@ -257,11 +241,130 @@ main:
     # Llamar a macros con valores inmediatos
     pintar(espacio_fondo, espacio_fondo_ancho, espacio_fondo_altura, 0, 0)
     pintar(espacio_sapo_lengua, espacio_sapo_ancho, espacio_sapo_altura, 0, 101)
-    pintar(espacio_mosca_arriba, espacio_mosca_ancho, espacio_mosca_altura, 200, 112)
+    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, 200, 112)
     pintar(espacio_mosca_mala_abajo, espacio_mosca_ancho, espacio_mosca_altura, 263, 0)
-    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, 325, 112)
+    pintar(espacio_mosca_arriba, espacio_mosca_ancho, espacio_mosca_altura, 325, 112)
     pintar(espacio_mosca_mala_arriba, espacio_mosca_ancho, espacio_mosca_altura, 388, 224)
-    pintar(espacio_mosca_arriba, espacio_mosca_ancho, espacio_mosca_altura, 450, 112)
-    
-    li $v0, 10
-    syscall
+    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, 450, 112)
+
+   main:
+    lw   $t0, 0xFFFF0004         # Carga en $t0 la tecla presionada desde la dirección 0xFFFF0004
+    beq  $t0, 0x65, salida         # Si $t0 es igual a 0x65, salta a "salida" para terminar el programa
+    li   $t1, sapo_velocidad      # Carga en $t1 la velocidad definida para el sapo (sapo_velocidad)
+    lw   $t2, j_sapo              # Carga en $t2 la posición actual del sapo (variable j_sapo)
+    beq  $t0, 0x77, sapo_sube      # Si la tecla es 0x77, salta a "sapo_sube" (movimiento hacia la izquierda)
+    beq  $t0, 0x73, sapo_baja      # Si la tecla es 0x73, salta a "sapo_baja" (movimiento hacia la derecha)
+    beq  $t0, 0x64, lengua         # Si la tecla es 0x64, salta a "lengua" para activar la lengua
+    sw   $zero, 0xFFFF0004         # Limpia la dirección 0xFFFF0004 (resetea el valor de la tecla)
+    b    bucle             # Salta al “bucle” para las actualizaciones y dibujo
+
+sapo_sube:
+    sub  $t2, $t2, sapo_velocidad  # Resta la velocidad a la posición actual para mover el sapo a la izquierda
+    sw   $t2, j_sapo              # Actualiza la posición del sapo en la variable j_sapo
+    b    bucle             # Salta a “bucle”
+
+sapo_baja:
+    add  $t2, $t2, sapo_velocidad  # Suma la velocidad a la posición actual para mover el sapo a la derecha
+    sw   $t2, j_sapo              # Actualiza la posición en j_sapo
+    b    bucle             # Salta a “bucle”
+
+lengua:
+    sw   $t0, tecla_lengua        # Guarda en tecla_lengua el código de la tecla presionada (activa la lengua)
+    add  $t2, $t2, 27             # Ajusta la posición de la lengua sumando 27 a la posición actual del sapo
+    sw   $t2, j_lengua            # Guarda la posición resultante en j_lengua (coordenada X de la lengua)
+    li   $t2, i_sapo_posicion     # Carga en $t2 el valor base de la posición del sapo (i_sapo_posicion)
+    add  $t2, $t2, espacio_sapo_ancho  # Suma a ese valor el ancho del sapo (espacio_sapo_ancho)
+    sw   $t2, i_lengua_inicial    # Define i_lengua_inicial con el valor calculado (límite izquierdo de la línea)
+    sw   $t2, i_lengua_final      # Inicializa i_lengua_final con el mismo valor (extremo derecho inicial de la lengua)
+
+bucle:
+    # (Comienzo de la actualización general y dibujo de objetos)
+
+    lw   $t0, tecla_lengua        # Carga el valor de tecla_lengua para verificar si la lengua está activa
+    bne  $t0, 0x64, pintar_sapo    # Si tecla_lengua no es 0x64, salta a pintar_sapo (dibuja el sapo)
+    lw   $t0, i_lengua_inicial    # Carga la coordenada X de inicio de la lengua (i_lengua_inicial)
+    lw   $t1, j_lengua            # Carga la coordenada Y de la lengua (j_lengua)
+    ubicar($t0, $t1)              # Convierte las coordenadas lógicas (i_lengua_inicial, j_lengua) a reales, dejando $s0 y $s1
+    add  $t0, $zero, $s1          # Copia el valor real de la coordenada Y (de $s1) a $t0
+    mul  $t0, $t0, ANCHO_FB       # Calcula el offset vertical: y_real * ANCHO_FB
+    add  $t0, $t0, $s0           # Suma la coordenada x real para obtener el índice lineal
+    mul  $t0, $t0, 4             # Convierte el índice lineal a byte-offset (4 bytes/píxel)
+    add  $s0, $t0, DIRECCION_DISPLAY  # Suma la dirección base del framebuffer y obtiene la dirección real del píxel
+    lw   $t0, ($s0)             # Carga el color del píxel ubicado en la dirección calculada
+    beq  $t0, 0x001B9919, limpiar_lengua  # Si el color es 0x001B9919, salta a limpiar_lengua
+
+lengua_sin_darle_al_blaco:
+    lw   $t0, 0xFFFF0004         # Vuelve a cargar el valor de la tecla desde la dirección de entrada
+    beq  $t0, 0x61, limpiar_lengua # Si la tecla es 0x61, salta a limpiar_lengua (desactiva la lengua)
+    lw   $t3, i_lengua_final      # Carga la posición X actual del extremo de la lengua (i_lengua_final)
+    li   $t8, 489                # Carga el valor 489, que es el límite derecho de la lengua
+    bge  $t3, $t8, limpiar_lengua  # Si i_lengua_final >= 489, salta a limpiar_lengua (no se dibuja más)
+    lw   $t0, i_lengua_final      # Carga nuevamente i_lengua_final para usar en el dibujo
+    lw   $t1, j_lengua            # Carga la coordenada Y donde se dibuja la lengua
+    ubicar($t0, $t1)              # Convierte (i_lengua_final, j_lengua) a coordenadas reales ($s0 y $s1)
+    add  $t0, $zero, $s1          # Copia el valor de y real (de $s1) a $t0
+    mul  $t0, $t0, ANCHO_FB       # Calcula el offset vertical real multiplicando y_real por el ancho del framebuffer
+    add  $t0, $t0, $s0           # Suma la coordenada x real para formar el índice lineal
+    mul  $t0, $t0, 4             # Multiplica el índice por 4 para obtener la posición en bytes
+    add  $s0, $t0, DIRECCION_DISPLAY  # Añade la dirección base del framebuffer para obtener la dirección final
+    li   $t2, 0x5059D3           # Carga el color de dibujo 0x5059D3 en $t2
+    sw   $t2, ($s0)             # Escribe el color en el píxel (dibuja la primera fila de la lengua)
+    lw   $t0, i_lengua_final      # Vuelve a cargar i_lengua_final para dibujar la segunda fila
+    lw   $t1, j_lengua            # Carga la coordenada Y base de la lengua
+    add  $t1, $t1, 1             # Incrementa la coordenada Y en 1 para la fila inferior
+    ubicar($t0, $t1)              # Convierte (i_lengua_final, j_lengua+1) a coordenadas reales ($s0, $s1)
+    add  $t0, $zero, $s1          # Copia la coordenada y real en $t0
+    mul  $t0, $t0, ANCHO_FB       # Calcula el offset vertical utilizando y_real y ANCHO_FB
+    add  $t0, $t0, $s0           # Suma la coordenada x real para formar el índice lineal
+    mul  $t0, $t0, 4             # Convierte el índice a bytes (4 bytes/píxel)
+    add  $s0, $t0, DIRECCION_DISPLAY  # Suma la dirección base del framebuffer para obtener la dirección final del píxel
+    li   $t2, 0x5059D3           # Vuelve a cargar el color 0x5059D3 en $t2
+    sw   $t2, ($s0)             # Escribe el color en la segunda fila (dibuja el pixel con grosor)
+    lw   $t1, i_lengua_final      # Carga el valor actual de i_lengua_final
+    li   $t8, 489               # Carga el valor 489 (límite derecho de la lengua)
+    blt  $t1, $t8, increment_line  # Si i_lengua_final es menor que 489, salta a increment_line
+    j    bucle             # De lo contrario, salta a bucle sin incrementar
+
+increment_line:
+    addi $t1, $t1, 1             # Incrementa i_lengua_final en 1 (extiende la lengua horizontalmente)
+    sw   $t1, i_lengua_final      # Guarda el nuevo valor de i_lengua_final en memoria
+    b    bucle             # Salta a bucle
+
+limpiar_lengua:
+    sw   $zero, tecla_lengua     # Resetea la variable tecla_lengua a 0
+    sw   $zero, 0xFFFF0004       # Limpia el registro de entrada (establece 0 en 0xFFFF0004)
+
+horizontal_retract_loop:
+    lw   $t0, i_lengua_inicial   # Carga la posición mínima de la lengua (i_lengua_inicial)
+    lw   $t1, 72                # Carga el valor 72 (generalmente la posición X del sapo)
+    beq  $t0, $t1, pintar_sapo   # Si i_lengua_inicial es igual a 72, la retracción termina y se salta a pintar_sapo
+    lw   $t2, j_lengua           # Carga la coordenada Y de la lengua
+    ubicar($t0, $t2)             # Convierte (i_lengua_inicial, j_lengua) a coordenadas reales ($s0, $s1)
+    add  $t3, $zero, $s1         # Copia la coordenada y real en $t3
+    mul  $t3, $t3, ANCHO_FB      # Calcula el offset vertical: y_real * ANCHO_FB
+    add  $t3, $t3, $s0          # Suma la coordenada x real para formar el índice lineal
+    mul  $t3, $t3, 4            # Convierte el índice a byte-offset (4 bytes/píxel)
+    add  $s0, $t3, DIRECCION_DISPLAY  # Calcula la dirección final del píxel en el framebuffer
+    li   $t4, 0x1B9919          # Carga el color 0x1B9919 (color usado para borrar la lengua)
+    sw   $t4, ($s0)            # Escribe el color en el pixel (borra ese píxel)
+    sub  $t0, $t0, 1            # Decrementa en 1 la posición X (retracción hacia el sapo)
+    sw   $t0, i_lengua_final   # Actualiza la variable i_lengua_final con el nuevo valor
+    b    horizontal_retract_loop  # Repite la retracción horizontal
+
+pintar_sapo:
+    lw   $t0, 0xFFFF0004       # Carga la tecla presionada desde 0xFFFF0004
+    beqz $t0, final_sapo        # Si no se presionó ninguna tecla, salta a final_sapo
+    lw   $t0, j_sapo           # Carga la posición Y actual del sapo (j_sapo)
+    pintar(espacio_sapo_lengua, espacio_sapo_ancho, espacio_sapo_altura, i_sapo_posicion, $t0)  # Llama a la función pintar para dibujar el sapo
+
+final_sapo:
+    lw   $t0, tecla_lengua     # Carga el estado de la lengua desde tecla_lengua
+    bne  $t0, 0x64, bucle_fin  # Si la lengua no sigue activa (tecla distinta de 0x64), salta a bucle_fin
+    b    bucle          # Si la lengua sigue activa, regresa a bucle
+
+bucle_fin:
+    b    main                # Salta a la rutina principal para el siguiente frame
+
+salida:
+    li   $v0, 10             # Carga el código 10 del syscall (exit)
+    syscall                  # Llama al syscall para salir del programa
