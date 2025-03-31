@@ -116,7 +116,7 @@
     # Calcular x = (%x mod FB_WIDTH) de forma positiva
     li    $t0, ANCHO_FB      # Cargar el ancho del FB en $t0
     div   $s0, $t0           # Divide $s0 entre FB_WIDTH
-    mfhi  $s0                # $s0 â† residuo
+    mfhi  $s0                # $s0 â†? residuo
     bltz  $s0, adjust_x      # Si el residuo es negativo, ajÃºstalo
     j     compute_y
 adjust_x:
@@ -126,7 +126,7 @@ compute_y:
     # Calcular y = (%y mod FB_HEIGHT) de forma positiva
     li    $t0, ALTURA_FB     # Cargar la altura del FB en $t0
     div   $s1, $t0           # Divide $s1 entre FB_HEIGHT
-    mfhi  $s1                # $s1 â† residuo
+    mfhi  $s1                # $s1 â†? residuo
     bltz  $s1, adjust_y
     j     done_coords
 adjust_y:
@@ -184,6 +184,8 @@ espacio_final_malo: .space espacio_final_longitud
 file_fondo_objeto: .asciiz "fondoobjeto.rgba"
 .align 2
 espacio_fondo_objeto: .space espacio_efecto_longitud
+
+msg_color: .asciiz "Color actual del pixel: "
 
 # Movimiento
 j_sapo: .word j_sapo_posicion_inicial
@@ -249,17 +251,17 @@ i_lengua_final: .word 0
     beq  $t0, 0x73, sapo_baja      # Si la tecla es 0x73, salta a "sapo_baja" (movimiento hacia la derecha)
     beq  $t0, 0x64, lengua         # Si la tecla es 0x64, salta a "lengua" para activar la lengua
     sw   $zero, 0xFFFF0004         # Limpia la direcciÃ³n 0xFFFF0004 (resetea el valor de la tecla)
-    b    bucle             # Salta al â€œbucleâ€ para las actualizaciones y dibujo
+    b    bucle             # Salta al â€œbucleâ€? para las actualizaciones y dibujo
 
 sapo_sube:
     sub  $t2, $t2, sapo_velocidad  # Resta la velocidad a la posiciÃ³n actual para mover el sapo a la izquierda
     sw   $t2, j_sapo              # Actualiza la posiciÃ³n del sapo en la variable j_sapo
-    b    bucle             # Salta a â€œbucleâ€
+    b    bucle             # Salta a â€œbucleâ€?
 
 sapo_baja:
     add  $t2, $t2, sapo_velocidad  # Suma la velocidad a la posiciÃ³n actual para mover el sapo a la derecha
     sw   $t2, j_sapo              # Actualiza la posiciÃ³n en j_sapo
-    b    bucle             # Salta a â€œbucleâ€
+    b    bucle             # Salta a â€œbucleâ€?
 
 lengua:
     sw   $t0, tecla_lengua        # Guarda en tecla_lengua el cÃ³digo de la tecla presionada (activa la lengua)
@@ -273,22 +275,22 @@ lengua:
 
 bucle:
  # --- Manejo de Mosca 1 ---
-    lw   $t0, i_mosca1
-    lw   $t1, j_mosca1
-    lw   $t2, mosca1_vuelo
-    beq  $t2, 1, abrir_alas
-    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
-    li   $t2, 1
-    sw   $t2, mosca1_vuelo
-    b    final_vuelo
-abrir_alas:
-    pintar(espacio_mosca_abajo_vuela, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
-    sw   $zero, mosca1_vuelo
-final_vuelo:
-    lw   $t0, j_mosca1
-    add  $t0, $t0, mosca1_velocidad
-    sw   $t0, j_mosca1
-mosca1_lista:
+#    lw   $t0, i_mosca1
+#    lw   $t1, j_mosca1
+#    lw   $t2, mosca1_vuelo
+#    beq  $t2, 1, abrir_alas
+#    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+#    li   $t2, 1
+#    sw   $t2, mosca1_vuelo
+#    b    final_vuelo
+#abrir_alas:
+#    pintar(espacio_mosca_abajo_vuela, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+#    sw   $zero, mosca1_vuelo
+#final_vuelo:
+#    lw   $t0, j_mosca1
+#    add  $t0, $t0, mosca1_velocidad
+#    sw   $t0, j_mosca1
+#mosca1_lista:
 
  # --- Manejo de Mosca 2 ---
     lw   $t0, i_mosca2
@@ -374,31 +376,53 @@ mosca5_lista:
     add  $s0, $t0, DIRECCION_DISPLAY  # Suma la direcciÃ³n base del framebuffer y obtiene la direcciÃ³n real del pÃ­xel
     lw   $t0, ($s0)             # Carga el color del pÃ­xel ubicado en la direcciÃ³n calculada
 
-lengua_sin_darle_al_blaco:
-    lw   $t0, 0xFFFF0004         # Vuelve a cargar el valor de la tecla desde la direcciÃ³n de entrada
-    beq  $t0, 0x61, limpiar_lengua # Si la tecla es 0x61, salta a limpiar_lengua (desactiva la lengua)
-    lw   $t3, i_lengua_final      # Carga la posiciÃ³n X actual del extremo de la lengua (i_lengua_final)
-    li   $t8, 489                # Carga el valor 489, que es el lÃ­mite derecho de la lengua
-    bge  $t3, $t8, limpiar_lengua  # Si i_lengua_final >= 489, salta a limpiar_lengua (no se dibuja mÃ¡s)
-    lw   $t0, i_lengua_final      # Carga nuevamente i_lengua_final para usar en el dibujo
-    lw   $t1, j_lengua            # Carga la coordenada Y donde se dibuja la lengua
-    ubicar($t0, $t1)              # Convierte (i_lengua_final, j_lengua) a coordenadas reales ($s0 y $s1)
-    add  $t0, $zero, $s1          # Copia el valor de y real (de $s1) a $t0
-    mul  $t0, $t0, ANCHO_FB       # Calcula el offset vertical real multiplicando y_real por el ancho del framebuffer
-    add  $t0, $t0, $s0           # Suma la coordenada x real para formar el Ã­ndice lineal
-    mul  $t0, $t0, 4             # Multiplica el Ã­ndice por 4 para obtener la posiciÃ³n en bytes
-    add  $s0, $t0, DIRECCION_DISPLAY  # AÃ±ade la direcciÃ³n base del framebuffer para obtener la direcciÃ³n final
-    li   $t2, 0x5059D3           # Carga el color de dibujo 0x5059D3 en $t2
-    sw   $t2, ($s0)             # Escribe el color en el pÃ­xel (dibuja la primera fila de la lengua)
-    lw   $t1, i_lengua_final      # Carga el valor actual de i_lengua_final
-    li   $t8, 489               # Carga el valor 489 (lÃ­mite derecho de la lengua)
-    blt  $t1, $t8, increment_line  # Si i_lengua_final es menor que 489, salta a increment_line
-    j    bucle             # De lo contrario, salta a bucle sin incrementar
+lengua_sin_darle_al_blanco:
+    lw   $t0, 0xFFFF0004           # Recarga el valor de la tecla desde la dirección de entrada
+    beq  $t0, 0x61, limpiar_lengua  # Si la tecla es 0x61, salta a limpiar_lengua (desactiva la lengua)
+    
+    lw   $t3, i_lengua_final       # Carga la posición X actual del extremo de la lengua (i_lengua_final)
+    li   $t8, 489                  # Límite derecho de la lengua
+    bge  $t3, $t8, limpiar_lengua  # Si i_lengua_final >= 489, salta a limpiar_lengua (no se dibuja más)
+    
+    lw   $t0, i_lengua_final       # Vuelve a cargar i_lengua_final para usar en el dibujo
+    lw   $t1, j_lengua             # Carga la coordenada Y donde se dibuja la lengua
+    ubicar($t0, $t1)               # Convierte (i_lengua_final, j_lengua) en coordenadas reales ($s0, $s1)
+    
+    # Calcula la dirección del píxel en el framebuffer:
+    add  $t0, $zero, $s1           # Copia la coordenada Y real ($s1) a $t0
+    mul  $t0, $t0, ANCHO_FB        # y_real * ANCHO_FB (offset vertical)
+    add  $t0, $t0, $s0             # Suma la coordenada X real para formar el índice lineal
+    mul  $t0, $t0, 4               # Multiplica por 4 para obtener la posición en bytes
+    add  $s0, $t0, DIRECCION_DISPLAY # Suma la base del framebuffer para obtener la dirección final
+
+    # Comprobación del color actual del píxel:
+    lw   $t4, ($s0)               # Carga el color actual del píxel en $t4
+    li   $t5, -16711420            # Carga el color prohibido (#141510) en $t5
+    beq  $t4, $t5, limpiar_lengua   # Si el píxel ya es de color #141510, salta a limpiar_lengua
+
+    # --- Bloque agregado para imprimir el color actual ---
+    la   $a0, msg_color           # Carga la dirección del mensaje "Color actual del pixel: "
+    li   $v0, 4                   # Código de servicio para imprimir cadena
+    syscall
+
+    move $a0, $t4                # Mueve el contenido de $t4 (color actual) a $a0
+    li   $v0, 1                   # Código de servicio para imprimir entero
+    syscall
+    # -------------------------------------------------------
+
+    li   $t2, 0x5059D3            # Carga el color de dibujo 0x5059D3 en $t2
+    sw   $t2, ($s0)               # Escribe el color en el píxel (dibuja la primera fila de la lengua)
+
+    lw   $t1, i_lengua_final      # Recarga el valor actual de i_lengua_final
+    li   $t8, 489                 # Carga nuevamente el límite derecho (489)
+    blt  $t1, $t8, increment_line # Si i_lengua_final es menor que 489, salta a increment_line
+    j    bucle                   # De lo contrario, salta a bucle sin incrementar
 
 increment_line:
-    addi $t1, $t1, 1             # Incrementa i_lengua_final en 1 (extiende la lengua horizontalmente)
+    addi $t1, $t1, 1              # Incrementa i_lengua_final en 1 (extiende la lengua horizontalmente)
     sw   $t1, i_lengua_final      # Guarda el nuevo valor de i_lengua_final en memoria
-    b    bucle             # Salta a bucle
+    j    bucle                   # Salta a bucle
+
 
 limpiar_lengua:
     sw   $zero, tecla_lengua           # Resetea la bandera de activaciÃ³n de la lengua
