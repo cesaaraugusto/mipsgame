@@ -270,7 +270,7 @@ sapo_baja:
 
 lengua:
     sw   $t0, tecla_lengua        # Guarda en tecla_lengua el código de la tecla presionada (activa la lengua)
-    add  $t2, $t2, 27             # Ajusta la posición de la lengua sumando 27 a la posición actual del sapo
+    add  $t2, $t2, 29             # Ajusta la posición de la lengua sumando 27 a la posición actual del sapo
     sw   $t2, j_lengua            # Guarda la posición resultante en j_lengua (coordenada X de la lengua)
     li   $t2, i_sapo_posicion     # Carga en $t2 el valor base de la posición del sapo (i_sapo_posicion)
     add  $t2, $t2, espacio_sapo_ancho  # Suma a ese valor el ancho del sapo (espacio_sapo_ancho)
@@ -291,7 +291,6 @@ bucle:
     mul  $t0, $t0, 4             # Convierte el índice lineal a byte-offset (4 bytes/píxel)
     add  $s0, $t0, DIRECCION_DISPLAY  # Suma la dirección base del framebuffer y obtiene la dirección real del píxel
     lw   $t0, ($s0)             # Carga el color del píxel ubicado en la dirección calculada
-    beq  $t0, 0x001B9919, limpiar_lengua  # Si el color es 0x001B9919, salta a limpiar_lengua
 
 lengua_sin_darle_al_blaco:
     lw   $t0, 0xFFFF0004         # Vuelve a cargar el valor de la tecla desde la dirección de entrada
@@ -309,17 +308,6 @@ lengua_sin_darle_al_blaco:
     add  $s0, $t0, DIRECCION_DISPLAY  # Añade la dirección base del framebuffer para obtener la dirección final
     li   $t2, 0x5059D3           # Carga el color de dibujo 0x5059D3 en $t2
     sw   $t2, ($s0)             # Escribe el color en el píxel (dibuja la primera fila de la lengua)
-    lw   $t0, i_lengua_final      # Vuelve a cargar i_lengua_final para dibujar la segunda fila
-    lw   $t1, j_lengua            # Carga la coordenada Y base de la lengua
-    add  $t1, $t1, 1             # Incrementa la coordenada Y en 1 para la fila inferior
-    ubicar($t0, $t1)              # Convierte (i_lengua_final, j_lengua+1) a coordenadas reales ($s0, $s1)
-    add  $t0, $zero, $s1          # Copia la coordenada y real en $t0
-    mul  $t0, $t0, ANCHO_FB       # Calcula el offset vertical utilizando y_real y ANCHO_FB
-    add  $t0, $t0, $s0           # Suma la coordenada x real para formar el índice lineal
-    mul  $t0, $t0, 4             # Convierte el índice a bytes (4 bytes/píxel)
-    add  $s0, $t0, DIRECCION_DISPLAY  # Suma la dirección base del framebuffer para obtener la dirección final del píxel
-    li   $t2, 0x5059D3           # Vuelve a cargar el color 0x5059D3 en $t2
-    sw   $t2, ($s0)             # Escribe el color en la segunda fila (dibuja el pixel con grosor)
     lw   $t1, i_lengua_final      # Carga el valor actual de i_lengua_final
     li   $t8, 489               # Carga el valor 489 (límite derecho de la lengua)
     blt  $t1, $t8, increment_line  # Si i_lengua_final es menor que 489, salta a increment_line
@@ -331,25 +319,33 @@ increment_line:
     b    bucle             # Salta a bucle
 
 limpiar_lengua:
-    sw   $zero, tecla_lengua     # Resetea la variable tecla_lengua a 0
-    sw   $zero, 0xFFFF0004       # Limpia el registro de entrada (establece 0 en 0xFFFF0004)
+    sw   $zero, tecla_lengua           # Resetea la bandera de activación de la lengua
+    sw   $zero, 0xFFFF0004             # Limpia el puerto de entrada (regresa la tecla a 0)
 
-horizontal_retract_loop:
-    lw   $t0, i_lengua_inicial   # Carga la posición mínima de la lengua (i_lengua_inicial)
-    lw   $t1, 72                # Carga el valor 72 (generalmente la posición X del sapo)
-    beq  $t0, $t1, pintar_sapo   # Si i_lengua_inicial es igual a 72, la retracción termina y se salta a pintar_sapo
-    lw   $t2, j_lengua           # Carga la coordenada Y de la lengua
-    ubicar($t0, $t2)             # Convierte (i_lengua_inicial, j_lengua) a coordenadas reales ($s0, $s1)
-    add  $t3, $zero, $s1         # Copia la coordenada y real en $t3
-    mul  $t3, $t3, ANCHO_FB      # Calcula el offset vertical: y_real * ANCHO_FB
-    add  $t3, $t3, $s0          # Suma la coordenada x real para formar el índice lineal
-    mul  $t3, $t3, 4            # Convierte el índice a byte-offset (4 bytes/píxel)
-    add  $s0, $t3, DIRECCION_DISPLAY  # Calcula la dirección final del píxel en el framebuffer
-    li   $t4, 0x1B9919          # Carga el color 0x1B9919 (color usado para borrar la lengua)
-    sw   $t4, ($s0)            # Escribe el color en el pixel (borra ese píxel)
-    sub  $t0, $t0, 1            # Decrementa en 1 la posición X (retracción hacia el sapo)
-    sw   $t0, i_lengua_final   # Actualiza la variable i_lengua_final con el nuevo valor
-    b    horizontal_retract_loop  # Repite la retracción horizontal
+clear_loop:
+    lw   $t0, i_lengua_final           # Carga la coordenada X actual del extremo de la lengua
+    lw   $t1, i_lengua_inicial         # Carga el límite izquierdo de la lengua
+    blt  $t0, $t1, clear_done          # Si i_lengua_final es menor que i_lengua_inicial, finaliza la limpieza
+    lw   $t2, j_lengua                 # Carga la coordenada Y donde se dibuja la lengua
+    ubicar($t0, $t2)                   # Convierte (i_lengua_final, j_lengua) a coordenadas reales (resultado en $s0 y $s1)
+    move $t3, $s1                     # Copia la coordenada Y real desde $s1 a $t3
+    mul  $t3, $t3, ANCHO_FB           # Multiplica y_real por el ancho del framebuffer (calcula offset vertical en píxeles)
+    add  $t3, $t3, $s0                # Suma la coordenada X real ($s0) para formar el índice lineal del píxel
+    li   $t4, 4                      # Carga el valor 4, que representa 4 bytes por píxel
+    mul  $t3, $t3, $t4               # Convierte el índice lineal a un offset en bytes
+    add  $t3, $t3, DIRECCION_DISPLAY  # Añade la dirección base del framebuffer para obtener la dirección física del píxel
+    li   $t5, 0x84945C             # Carga el color de fondo (0x00000000) para borrar el píxel
+    sw   $t5, ($t3)                 # Escribe el color de fondo en el píxel de la primera fila
+
+    lw   $t6, i_lengua_final         # Carga el valor actual de i_lengua_final
+    addi $t6, $t6, -1               # Decrementa i_lengua_final en 1 (retracción de la lengua)
+    sw   $t6, i_lengua_final         # Actualiza la variable i_lengua_final en memoria
+
+    j    clear_loop                 # Repite el ciclo para borrar el siguiente píxel de la lengua
+
+clear_done:
+    j    bucle                     # Una vez que se hayan borrado todos los píxeles necesarios, salta al ciclo principal (bucle)
+
 
 pintar_sapo:
     lw   $t0, 0xFFFF0004       # Carga la tecla presionada desde 0xFFFF0004
