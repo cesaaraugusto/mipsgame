@@ -15,9 +15,9 @@
     .eqv espacio_sapo_longitud 17856
     
 	#Mosca
-    .eqv espacio_mosca_ancho 32
-    .eqv espacio_mosca_altura 32
-    .eqv espacio_mosca_longitud 4096
+    .eqv espacio_mosca_ancho 35
+    .eqv espacio_mosca_altura 35
+    .eqv espacio_mosca_longitud 4900
 
 	#Efecto
     .eqv espacio_efecto_ancho 35
@@ -35,12 +35,13 @@
     .eqv i_sapo_posicion 0
     .eqv j_sapo_posicion_inicial 101 
     .eqv sapo_velocidad 4 
-    .eqv j_mosca3_minimo 0
-    .eqv j_mosca3_maximo 256
+    .eqv j_mosca3_minimo 10
+    .eqv j_mosca3_maximo 250
     .eqv i_mosca1_posicion 200
     .eqv i_mosca2_posicion 325
     .eqv i_mosca3_posicion 450
     .eqv i_mosca4_posicion 263
+    .eqv i_mosca5_posicion 388
     .eqv j_mosca1_posicion_inicial 112
     .eqv j_mosca2_posicion_inicial 112
     .eqv j_mosca3_posicion_inicial 112
@@ -49,7 +50,6 @@
     .eqv mosca2_velocidad 4
     .eqv mosca3_velocidad 5
     .eqv mosca4_velocidad 2
-    .eqv mosca3_espera 5
 
 .macro cargar(%file_name, %buffer)
     # Abrir archivo
@@ -196,6 +196,8 @@ j_mosca3: .word j_mosca3_posicion_inicial
 i_mosca3: .word i_mosca3_posicion
 j_mosca4: .word j_mosca4_posicion_inicial
 i_mosca4: .word i_mosca4_posicion
+j_mosca5: .word j_mosca4_posicion_inicial
+i_mosca5: .word i_mosca5_posicion
 mosca_mala_vuelo_arriba: .word 1
 mosca_vuelo_arriba: .word 1
 mosca_vuelo_pausa_contador: .word 0
@@ -206,6 +208,7 @@ mosca1_vuelo: .word 1
 mosca2_vuelo: .word 1
 mosca3_vuelo: .word 1
 mosca4_vuelo: .word 1
+mosca5_vuelo: .word 1
 tecla_lengua: .word 0
 score: .word 0
 j_lengua: .word 0
@@ -232,11 +235,9 @@ i_lengua_final: .word 0
 
     # Llamar a macros con valores inmediatos
     pintar(espacio_fondo, espacio_fondo_ancho, espacio_fondo_altura, 0, 0)
-    pintar(espacio_sapo_lengua, espacio_sapo_ancho, espacio_sapo_altura, 0, 101)
+    pintar(espacio_sapo, espacio_sapo_ancho, espacio_sapo_altura, 0, 101)
     pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, 200, 112)
-    pintar(espacio_mosca_mala_abajo, espacio_mosca_ancho, espacio_mosca_altura, 263, 0)
     pintar(espacio_mosca_arriba, espacio_mosca_ancho, espacio_mosca_altura, 325, 112)
-    pintar(espacio_mosca_mala_arriba, espacio_mosca_ancho, espacio_mosca_altura, 388, 224)
     pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, 450, 112)
 
    main:
@@ -268,6 +269,7 @@ lengua:
     add  $t2, $t2, espacio_sapo_ancho  # Suma a ese valor el ancho del sapo (espacio_sapo_ancho)
     sw   $t2, i_lengua_inicial    # Define i_lengua_inicial con el valor calculado (límite izquierdo de la línea)
     sw   $t2, i_lengua_final      # Inicializa i_lengua_final con el mismo valor (extremo derecho inicial de la lengua)
+    b    pintar_sapo_lengua
 
 bucle:
  # --- Manejo de Mosca 1 ---
@@ -306,29 +308,59 @@ final_vuelo2:
     sw   $t0, j_mosca2
 mosca2_lista:
 
-    # --- Manejando Fish 3 ---
-    lw   $t0, mosca3_exists
-    beqz $t0, mosca3_lista
+ # --- Manejo de Mosca 3 ---
     lw   $t0, i_mosca3
     lw   $t1, j_mosca3
-    lw   $t2, mosca_vuelo_arriba
-    beqz $t2, vuelo_abajo
-vuelo_arriba:
-    bge  $t0, j_mosca3_minimo, vuelo_abajo
+    lw   $t2, mosca3_vuelo
+    beq  $t2, 1, abrir_alas3
+    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
     li   $t2, 1
-    sw   $t2, mosca_vuelo_arriba
+    sw   $t2, mosca3_vuelo
+    b    final3_vuelo
+abrir_alas3:
+    pintar(espacio_mosca_abajo_vuela, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    sw   $zero, mosca3_vuelo
+final3_vuelo:
+    lw   $t0, j_mosca3
     add  $t0, $t0, mosca3_velocidad
-    sw   $t0, i_mosca3
-    pintar(espacio_mosca_arriba, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
-    b    mosca3_lista
-vuelo_abajo:
-    ble  $t0, j_mosca3_maximo, vuelo_arriba
-    sw   $zero, mosca_vuelo_arriba
-    sub  $t0, $t0, mosca3_velocidad
-    sw   $t0, i_mosca3
-    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura $t0, $t1)
+    sw   $t0, j_mosca3
 mosca3_lista:
 
+ # --- Manejo de Mosca 4 ---
+    lw   $t0, i_mosca4
+    lw   $t1, j_mosca4
+    lw   $t2, mosca4_vuelo
+    beq  $t2, 1, abrir_alas4
+    pintar(espacio_mosca_mala_abajo, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    li   $t2, 1
+    sw   $t2, mosca4_vuelo
+    b    final4_vuelo
+abrir_alas4:
+    pintar(espacio_mosca_mala_abajo_vuela, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    sw   $zero, mosca4_vuelo
+final4_vuelo:
+    lw   $t0, j_mosca4
+    add  $t0, $t0, mosca4_velocidad
+    sw   $t0, j_mosca4
+mosca4_lista:
+
+ # --- Manejo de Mosca 4 ---
+    lw   $t0, i_mosca5
+    lw   $t1, j_mosca5
+    lw   $t2, mosca5_vuelo
+    beq  $t2, 1, abrir_alas5
+    pintar(espacio_mosca_mala_arriba, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    li   $t2, 1
+    sw   $t2, mosca5_vuelo
+    b    final5_vuelo
+abrir_alas5:
+    pintar(espacio_mosca_mala_arriba_vuela, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    sw   $zero, mosca5_vuelo
+final5_vuelo:
+    lw   $t0, j_mosca5
+    sub  $t0, $t0, mosca4_velocidad
+    sw   $t0, j_mosca5
+mosca5_lista:
 
     lw   $t0, tecla_lengua        # Carga el valor de tecla_lengua para verificar si la lengua está activa
     bne  $t0, 0x64, pintar_sapo    # Si tecla_lengua no es 0x64, salta a pintar_sapo (dibuja el sapo)
@@ -398,15 +430,23 @@ clear_done:
 
 
 pintar_sapo:
-    lw   $t0, 0xFFFF0004       # Carga la tecla presionada desde 0xFFFF0004
-    beqz $t0, final_sapo        # Si no se presionó ninguna tecla, salta a final_sapo
-    lw   $t0, j_sapo           # Carga la posición Y actual del sapo (j_sapo)
-    pintar(espacio_sapo_lengua, espacio_sapo_ancho, espacio_sapo_altura, i_sapo_posicion, $t0)  # Llama a la función pintar para dibujar el sapo
+    lw   $t0, 0xFFFF0004                     # Carga la tecla presionada desde 0xFFFF0004
+    beqz $t0, final_sapo                     # Si no se presionó ninguna tecla, salta a final_sapo
+    lw   $t0, j_sapo                         # Carga la posición Y actual del sapo (j_sapo)
+    pintar(espacio_sapo, espacio_sapo_ancho, espacio_sapo_altura, i_sapo_posicion, $t0)
+    j    final_sapo                         # Salta a final_sapo después de pintar
 
+pintar_sapo_lengua:
+    lw   $t0, 0xFFFF0004                     # Carga la tecla presionada desde 0xFFFF0004
+    beqz $t0, final_sapo                     # Si no se presionó ninguna tecla, salta a final_sapo
+    lw   $t0, j_sapo                         # Carga la posición Y actual del sapo (j_sapo)
+    pintar(espacio_sapo_lengua, espacio_sapo_ancho, espacio_sapo_altura, i_sapo_posicion, $t0)
+    j    final_sapo                         # Salta a final_sapo después de pintar
+    
 final_sapo:
-    lw   $t0, tecla_lengua     # Carga el estado de la lengua desde tecla_lengua
-    bne  $t0, 0x64, bucle_fin  # Si la lengua no sigue activa (tecla distinta de 0x64), salta a bucle_fin
-    b    bucle          # Si la lengua sigue activa, regresa a bucle
+    lw   $t0, tecla_lengua                  # Revisa el estado actual de la lengua
+    bne  $t0, 0x64, bucle_fin               # Si la lengua no sigue activa, salta a bucle_fin
+    b    bucle                             # Si la lengua sigue activa, vuelve a bucle
 
 bucle_fin:
     b    main                # Salta a la rutina principal para el siguiente frame
