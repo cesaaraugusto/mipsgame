@@ -35,29 +35,21 @@
     .eqv i_sapo_posicion 0
     .eqv j_sapo_posicion_inicial 101 
     .eqv sapo_velocidad 4 
-    .eqv j_mosca2_minimo 0
-    .eqv j_mosca2_maximo 256
-    .eqv j_mosca4_minimo 256
-    .eqv j_mosca4_maximo 0
-    .eqv j_mosca5_minimo 150
-    .eqv j_mosca5_maximo 0
+    .eqv j_mosca3_minimo 0
+    .eqv j_mosca3_maximo 256
     .eqv i_mosca1_posicion 200
-    .eqv i_mosca2_posicion 263
-    .eqv i_mosca3_posicion 325
-    .eqv i_mosca4_posicion 388
-    .eqv i_mosca5_posicion 450
+    .eqv i_mosca2_posicion 325
+    .eqv i_mosca3_posicion 450
+    .eqv i_mosca4_posicion 263
     .eqv j_mosca1_posicion_inicial 112
-    .eqv j_mosca2_posicion_inicial 0
+    .eqv j_mosca2_posicion_inicial 112
     .eqv j_mosca3_posicion_inicial 112
     .eqv j_mosca4_posicion_inicial 224
-    .eqv j_mosca5_posicion_inicial 112
     .eqv mosca1_velocidad 3
-    .eqv mosca2_velocidad 2
-    .eqv mosca3_velocidad 4
+    .eqv mosca2_velocidad 4
+    .eqv mosca3_velocidad 5
     .eqv mosca4_velocidad 2
-    .eqv mosca5_velocidad 5
     .eqv mosca2_espera 5
-    .eqv mosca4_espera 10
 
 .macro cargar(%file_name, %buffer)
     # Abrir archivo
@@ -204,16 +196,15 @@ j_mosca3: .word j_mosca3_posicion_inicial
 i_mosca3: .word i_mosca3_posicion
 j_mosca4: .word j_mosca4_posicion_inicial
 i_mosca4: .word i_mosca4_posicion
-j_mosca5: .word j_mosca5_posicion_inicial
-i_mosca5: .word i_mosca5_posicion
-mine1_going_right: .word 1
-mine2_going_right: .word 1
-mine1_frame_wait_counter: .word 0
-mine2_frame_wait_counter: .word 0
+mosca_mala_vuelo_arriba: .word 1
+mosca_mala_vuelo_pausa_contador: .word 0
 mosca1_exists: .word 1
+mosca2_exists: .word 1
 mosca3_exists: .word 1
-mosca4_exists: .word 1
-mosca_alternate: .word 1
+mosca1_vuelo: .word 1
+mosca2_vuelo: .word 1
+mosca3_vuelo: .word 1
+mosca4_vuelo: .word 1
 tecla_lengua: .word 0
 score: .word 0
 j_lengua: .word 0
@@ -278,7 +269,23 @@ lengua:
     sw   $t2, i_lengua_final      # Inicializa i_lengua_final con el mismo valor (extremo derecho inicial de la lengua)
 
 bucle:
-    # (Comienzo de la actualización general y dibujo de objetos)
+ # --- Manejo de Mosca 1 ---
+    lw   $t0, i_mosca1
+    lw   $t1, j_mosca1
+    lw   $t2, mosca1_vuelo
+    beq  $t2, 1, abrir_alas
+    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    li   $t2, 1
+    sw   $t2, mosca1_vuelo
+    b    final_vuelo
+abrir_alas:
+    pintar(espacio_mosca_abajo_vuela, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    sw   $zero, mosca1_vuelo
+final_vuelo:
+    lw   $t0, j_mosca1
+    add  $t0, $t0, mosca1_velocidad
+    sw   $t0, j_mosca1
+mosca1_lista:
 
     lw   $t0, tecla_lengua        # Carga el valor de tecla_lengua para verificar si la lengua está activa
     bne  $t0, 0x64, pintar_sapo    # Si tecla_lengua no es 0x64, salta a pintar_sapo (dibuja el sapo)
