@@ -49,7 +49,7 @@
     .eqv mosca2_velocidad 4
     .eqv mosca3_velocidad 5
     .eqv mosca4_velocidad 2
-    .eqv mosca2_espera 5
+    .eqv mosca3_espera 5
 
 .macro cargar(%file_name, %buffer)
     # Abrir archivo
@@ -197,7 +197,8 @@ i_mosca3: .word i_mosca3_posicion
 j_mosca4: .word j_mosca4_posicion_inicial
 i_mosca4: .word i_mosca4_posicion
 mosca_mala_vuelo_arriba: .word 1
-mosca_mala_vuelo_pausa_contador: .word 0
+mosca_vuelo_arriba: .word 1
+mosca_vuelo_pausa_contador: .word 0
 mosca1_exists: .word 1
 mosca2_exists: .word 1
 mosca3_exists: .word 1
@@ -286,6 +287,62 @@ final_vuelo:
     add  $t0, $t0, mosca1_velocidad
     sw   $t0, j_mosca1
 mosca1_lista:
+
+ # --- Manejo de Mosca 2 ---
+    lw   $t0, i_mosca2
+    lw   $t1, j_mosca2
+    lw   $t2, mosca2_vuelo
+    beq  $t2, 1, abrir_alas2
+    pintar(espacio_mosca_arriba, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    li   $t2, 1
+    sw   $t2, mosca2_vuelo
+    b    final_vuelo2
+abrir_alas2:
+    pintar(espacio_mosca_arriba_vuela, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    sw   $zero, mosca2_vuelo
+final_vuelo2:
+    lw   $t0, j_mosca2
+    sub  $t0, $t0, mosca2_velocidad
+    sw   $t0, j_mosca2
+mosca2_lista:
+
+# --- Manejando Mosca 3 ---
+    lw   $t0, mosca_vuelo_pausa_contador
+    bne  $t0, mosca3_espera, actualizacion_contador
+    # Determinar dirección de movimiento para mosca 3
+    lw   $t0, i_mosca3
+    ble  $t0, j_mosca3_minimo, actualizar_mosca_vuela_arriba
+    bge  $t0, j_mosca3_maximo, actualizar_mosca_vuela_abajo
+    b    mosca_actualizada
+actualizar_mosca_vuela_arriba:
+    li   $t0, 1
+    sw   $t0, mosca_vuelo_arriba
+    b    mosca_actualizada
+actualizar_mosca_vuela_abajo:
+    sw   $zero, mosca_vuelo_arriba
+    b    mosca_actualizada
+mosca_actualizada:
+    lw   $t0, mosca_vuelo_arriba
+    lw   $t1, i_mosca3
+    beqz $t0, resta_velocidad
+suma_mosca:
+    add  $t1, $t1, mosca3_velocidad
+    b    suma_terminada
+resta_velocidad:
+    sub  $t1, $t1, mosca3_velocidad
+suma_terminada:
+    sw   $t1, i_mosca3
+dibujar_mosca3:
+    lw   $t0, i_mosca3
+    lw   $t1, j_mosca3
+    pintar(espacio_mosca_abajo, espacio_mosca_ancho, espacio_mosca_altura, $t0, $t1)
+    sw   $zero, mosca3_espera
+    b    mosca3_lista
+actualizacion_contador:
+    lw   $t0, mosca3_espera
+    add  $t0, $t0, 1
+    sw   $t0, mosca3_espera
+mosca3_lista:
 
     lw   $t0, tecla_lengua        # Carga el valor de tecla_lengua para verificar si la lengua está activa
     bne  $t0, 0x64, pintar_sapo    # Si tecla_lengua no es 0x64, salta a pintar_sapo (dibuja el sapo)
